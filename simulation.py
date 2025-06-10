@@ -7,20 +7,17 @@ random.seed(SEED)
 
 # 模擬參數設定
 SIM_TIME = 480               # 模擬 480 分鐘
-THRESHOLD_WAIT_GIVE_ROD = 20 # 發桿等待超過 10 分鐘會離開
+STOP_ACCEPTING_CUSTOMERS_TIME = 420  # 結束營業前 60 分鐘停止收客
+THRESHOLD_WAIT_GIVE_ROD = 10 # 發桿等待超過 10 分鐘會離開
 THRESHOLD_WAIT_FISHING = 30  # 釣魚等待超過 30 分鐘會離開
-P_EAT_SHRIMP = 0.85          # 顧客烤蝦機率
+P_EAT_SHRIMP = 0.3          # 顧客烤蝦機率
 
 # 各流程服務時間（分鐘、固定或分布）
 T_GIVE_ROD =  1            # 發桿固定 1.2 分鐘
 T_GRILL = 7               # 烤蝦固定 7.8 分鐘
 T_CHECKOUT = 1            # 收銀固定 1.2 分鐘
 
-# 釣蝦與吃蝦時間分布參數
-FISH_MEAN = 120               # 釣蝦平均 120 分鐘
-FISH_SD   = 15               # 標準差 15
-FISH_MIN  = 60               # 最少 60 分鐘
-
+# 吃蝦時間分布參數
 EAT_MEAN  = 20               # 吃蝦平均 20 分鐘
 EAT_SD    = 5                # 標準差 5
 EAT_MIN   = 10               # 最少 10 分鐘
@@ -74,7 +71,8 @@ def customer(env, cid, clerk, fish_spots, eat_spots):
         remaining_time = max(SIM_TIME - env.now, 0)
 
         if fishing_time > remaining_time:
-            fishing_time = (remaining_time // 60) * 60
+            #fishing_time = (remaining_time // 60) * 60
+            fishing_time = remaining_time
 
         event_log.append({'id': cid, 'event': 'start_fishing',  'time': env.now,
                           'waiting_time_fish': wait_fish,
@@ -123,7 +121,7 @@ def get_interarrival(env_now):
     if env_now < 180:
         return 6    # 離峰：8 分鐘來一位
     elif env_now < 300:
-        return 5    # 尖峰：3 分鐘來一位
+        return 4.6    # 尖峰：3 分鐘來一位
     else:
         return 8
 
@@ -136,7 +134,7 @@ def setup(env):
     while True:
         mean_interval = get_interarrival(env.now)
         inter = random.expovariate(1.0 / mean_interval)
-        if env.now >= SIM_TIME:
+        if env.now >= STOP_ACCEPTING_CUSTOMERS_TIME:  # 修改判斷條件
             break
         yield env.timeout(inter)
         cid += 1
@@ -145,9 +143,11 @@ def setup(env):
 # 執行模擬
 env = simpy.Environment()
 env.process(setup(env))
-env.run(until=SIM_TIME)
+#env.run(until=SIM_TIME)
 
-# 第二階段，不接收新客人後把系統內的客人消化完
+# 執行到停止收客時間
+env.run(until=STOP_ACCEPTING_CUSTOMERS_TIME)
+# 繼續執行直到所有事件完成
 env.run()
 
 # 整理輸出為 DataFrame

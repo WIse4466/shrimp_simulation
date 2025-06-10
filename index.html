@@ -45,6 +45,13 @@
              <button onclick="speedUp()">加速</button>
              <button onclick="slowDown()">減速</button>
              <span id="speed-display">速度: 1x</span>
+             <div style="margin-top: 10px;">
+                 <label for="jsonFile" style="color: white;">選擇模擬情境：</label>
+                 <select id="jsonFile" onchange="loadSimulationFile()" style="padding: 5px; border-radius: 5px; border: none;">
+                     <option value="simulation_log.json">原始模擬</option>
+                     <option value="simulation_log_new.json">改進模擬</option>
+                 </select>
+             </div>
         </div>
 
         <canvas id="canvas" width="1200" height="600"></canvas>
@@ -79,7 +86,6 @@
         let currentTime = 0, simulationEvents = [], nextEventIndex = 0;
         let customers = new Map(), customerEventHistory = new Map();
         let animationFrameId = null, isRunning = false;
-        // --- MODIFIED: 調慢初始動畫速度 ---
         let speed = 10, lastTimestamp = 0, maxSimTime = 0;
         let stats = { total: 0, active: 0, completed: 0 };
         
@@ -94,9 +100,8 @@
             exit:          { x: 1180,y: 300, w: 0, h: 0, label: '出口' } 
         };
         
-        // --- MODIFIED: 修正 arrival 事件對應的區域 ---
         const stateMapping = {
-            'arrival':          { area: 'rod_queue',     color: '#95a5a6' }, // 抵達後直接去「等待發桿」區
+            'arrival':          { area: 'rod_queue',     color: '#95a5a6' },
             'give_rod':         { area: 'fishing_queue', color: '#95a5a6' },
             'start_fishing':    { area: 'fishing_spot',  color: '#16a085' },
             'finish_fishing':   { area: 'grill_spot',    color: '#e67e22' },
@@ -112,7 +117,6 @@
             constructor(id, arrivalTime) {
                 this.id = id;
                 this.state = 'arrival';
-                // 顧客的初始視覺位置設在入口處，但目標是第一個等待區
                 const startArea = areas['entrance'];
                 this.pos = { x: startArea.x + startArea.w / 2, y: startArea.y + startArea.h / 2 };
                 this.targetPos = { ...this.pos };
@@ -274,21 +278,19 @@
             document.getElementById('completed-customers').textContent = stats.completed;
         }
         
-        async function loadDataAndInit() {
+        async function loadSimulationFile() {
+            const fileSelect = document.getElementById('jsonFile');
+            const selectedFile = fileSelect.value;
+            
             try {
-                const response = await fetch('simulation_log.json?t=' + new Date().getTime());
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                simulationEvents = await response.json();
-                simulationEvents.sort((a, b) => a.time - b.time);
-                if (simulationEvents.length > 0) {
-                    maxSimTime = simulationEvents[simulationEvents.length - 1].time;
-                }
+                const response = await fetch(selectedFile);
+                const data = await response.json();
+                simulationEvents = data;
+                maxSimTime = Math.max(...data.map(e => e.time));
                 resetAnimation();
-                document.getElementById('startBtn').disabled = false;
-                console.log(`成功載入 ${simulationEvents.length} 個模擬事件。`);
-            } catch (e) {
-                console.error("無法載入 simulation_log.json:", e);
-                alert("錯誤：無法載入模擬日誌檔案！請確保 simulation_log.json 檔案存在於同一個目錄下，並且你正在透過一個本地伺服器來瀏覽此頁面。");
+            } catch (error) {
+                console.error('載入檔案失敗:', error);
+                alert('載入檔案失敗，請確認檔案是否存在');
             }
         }
 
@@ -331,13 +333,8 @@
             document.getElementById('speed-display').textContent = `速度: ${speed}x`;
         }
 
-        window.onload = () => {
-            document.getElementById('startBtn').disabled = true;
-            const initialCounts = {};
-            Object.values(areas).forEach(a => initialCounts[a.label] = 0);
-            drawBackground(initialCounts);
-            updateStats();
-            loadDataAndInit();
+        window.onload = function() {
+            loadSimulationFile();
         };
     </script>
 </body>

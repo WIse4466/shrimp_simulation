@@ -1,0 +1,18 @@
+# ---- Python 模組與編譯檔 ----
+__pycache__/          # Python 3 編譯後目錄 :contentReference[oaicite:0]{index=0}
+*.py[cod]             # .pyc, .pyo, .pyd… :contentReference[oaicite:1]{index=1}
+*$py.class            # Cython 產物 :contentReference[oaicite:2]{index=2}
+
+# ---- 虛擬環境 ----
+venv/                 # 忽略整個 venv 資料夾 :contentReference[oaicite:3]{index=3}
+
+# ---- 輸出 JSON 檔 ----
+*.json                # 忽略所有 JSON 檔案（模擬輸出或暫存 JSON） :contentReference[oaicite:4]{index=4}
+
+# ---- IDE / 編輯器 ----
+.vscode/              # Visual Studio Code 設定 :contentReference[oaicite:5]{index=5}
+.idea/                # IntelliJ / PyCharm 設定 :contentReference[oaicite:6]{index=6}
+
+# ---- 作業系統檔案 ----
+.DS_Store             # macOS 隱藏檔 :contentReference[oaicite:7]{index=7}
+Thumbs.db             # Windows 縮圖檔 :contentReference[oaicite:8]{index=8}

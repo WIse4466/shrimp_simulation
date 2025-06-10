@@ -7,11 +7,10 @@ cd shrimp_simulation
 ```
 # Set up environment
 ```bash!
-# 在專案根目錄執行
-# 使用 venv 建立虛擬環境
+# use venv to build virtual environment
 python -m venv venv
 
-# 啟動虛擬環境
+# activate virtual environment
 # Windows
 venv\Scripts\activate
 # macOS/Linux
@@ -22,7 +21,6 @@ pip install -r requirements.txt
 ```
 # Run simulation
 ```bash!
-# 在 backend 目錄下執行
 python3 simulation.py
 or 
 python simulation.py

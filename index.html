@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>釣蝦場模擬動畫 (進階版)</title>
+    <style>
+        /* --- CSS 樣式完全不變 --- */
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .container { max-width: 1200px; margin: 0 auto; background: rgba(255, 255, 255, 0.95); border-radius: 15px; padding: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.3); color: #333; }
+        h1 { text-align: center; color: #2c3e50; margin-bottom: 30px; font-size: 2.5em; text-shadow: 2px 2px 4px rgba(0,0,0,0.1); }
+        .controls { text-align: center; margin-bottom: 20px; padding: 15px; background: linear-gradient(45deg, #3498db, #2980b9); border-radius: 10px; color: white; }
+        button { background: linear-gradient(45deg, #e74c3c, #c0392b); color: white; border: none; padding: 12px 25px; margin: 5px; border-radius: 25px; cursor: pointer; font-size: 16px; font-weight: bold; transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.3); }
+        button:disabled { background: #95a5a6; cursor: not-allowed; transform: none; }
+        #canvas { border: 3px solid #34495e; border-radius: 10px; display: block; margin: 20px auto; background: #fdfdfd; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        .info-panel { display: flex; justify-content: space-around; margin-top: 20px; flex-wrap: wrap; }
+        .info-box { background: linear-gradient(135deg, #74b9ff, #0984e3); color: white; padding: 15px; border-radius: 10px; margin: 5px; flex: 1; min-width: 200px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+        .legend { background: rgba(255, 255, 255, 0.9); padding: 15px; border-radius: 10px; margin-top: 20px; border: 2px solid #3498db; }
+        .legend-item { display: inline-block; margin: 5px 10px; padding: 5px 10px; border-radius: 15px; color: white; font-weight: bold; font-size: 12px; }
+        #gantt-container {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            border: 2px solid #27ae60;
+            max-height: 400px;
+            overflow-y: auto;
+            font-size: 14px;
+        }
+        .gantt-row { display: flex; align-items: center; margin-bottom: 8px; }
+        .gantt-label { width: 80px; font-weight: bold; text-align: right; padding-right: 10px; }
+        .timeline-bar { flex-grow: 1; height: 20px; background-color: #ecf0f1; border-radius: 4px; position: relative; border: 1px solid #bdc3c7; }
+        .gantt-segment { position: absolute; height: 100%; border-radius: 3px; opacity: 0.8; box-sizing: border-box; border-right: 1px solid rgba(0,0,0,0.2); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🦐 釣蝦場即時模擬動畫 (進階版) 🦐</h1>
+        
+        <div class="controls">
+             <button id="startBtn" onclick="startAnimation()">開始/繼續</button>
+             <button id="pauseBtn" onclick="pauseAnimation()">暫停</button>
+             <button id="resetBtn" onclick="resetAnimation()">重置</button>
+             <button onclick="speedUp()">加速</button>
+             <button onclick="slowDown()">減速</button>
+             <span id="speed-display">速度: 1x</span>
+        </div>
+
+        <canvas id="canvas" width="1200" height="600"></canvas>
+
+        <div class="info-panel">
+            <div class="info-box"><h3>時間</h3><div id="current-time">0.00 分鐘</div></div>
+            <div class="info-box"><h3>總抵達客戶</h3><div id="total-customers">0</div></div>
+            <div class="info-box"><h3>活躍客戶</h3><div id="active-customers">0</div></div>
+            <div class="info-box"><h3>離開客戶</h3><div id="completed-customers">0</div></div>
+        </div>
+
+        <div class="legend">
+            <h3>圖例說明:</h3>
+            <span class="legend-item" style="background-color: #95a5a6;">等待中</span>
+            <span class="legend-item" style="background-color: #16a085;">釣魚中</span>
+            <span class="legend-item" style="background-color: #e67e22;">烤蝦中</span>
+            <span class="legend-item" style="background-color: #f1c40f;">用餐中</span>
+            <span class="legend-item" style="background-color: #9b59b6;">結帳中</span>
+            <span class="legend-item" style="background-color: #c0392b;">(耐心不足離開)</span>
+        </div>
+        
+        <div id="gantt-container">
+            <h3>顧客動態甘特圖</h3>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const ganttContainer = document.getElementById('gantt-container');
+
+        let currentTime = 0, simulationEvents = [], nextEventIndex = 0;
+        let customers = new Map(), customerEventHistory = new Map();
+        let animationFrameId = null, isRunning = false;
+        // --- MODIFIED: 調慢初始動畫速度 ---
+        let speed = 10, lastTimestamp = 0, maxSimTime = 0;
+        let stats = { total: 0, active: 0, completed: 0 };
+        
+        const areas = {
+            entrance:      { x: 50,  y: 300, w: 100, h: 100, label: '入口', color: '#7f8c8d' },
+            rod_queue:     { x: 200, y: 100, w: 150, h: 150, label: '等待發桿', color: '#bdc3c7' },
+            fishing_queue: { x: 200, y: 350, w: 150, h: 150, label: '等待釣位', color: '#bdc3c7' },
+            fishing_spot:  { x: 400, y: 200, w: 400, h: 250, label: '釣蝦池', color: '#3498db' },
+            grill_spot:    { x: 850, y: 100, w: 150, h: 150, label: '烤蝦區', color: '#e67e22' },
+            eating_spot:   { x: 850, y: 350, w: 150, h: 150, label: '用餐區', color: '#f1c40f' },
+            checkout_spot: { x: 1050,y: 250, w: 120, h: 100, label: '結帳區', color: '#9b59b6' },
+            exit:          { x: 1180,y: 300, w: 0, h: 0, label: '出口' } 
+        };
+        
+        // --- MODIFIED: 修正 arrival 事件對應的區域 ---
+        const stateMapping = {
+            'arrival':          { area: 'rod_queue',     color: '#95a5a6' }, // 抵達後直接去「等待發桿」區
+            'give_rod':         { area: 'fishing_queue', color: '#95a5a6' },
+            'start_fishing':    { area: 'fishing_spot',  color: '#16a085' },
+            'finish_fishing':   { area: 'grill_spot',    color: '#e67e22' },
+            'grill':            { area: 'eating_spot',   color: '#f1c40f' },
+            'start_eating':     { area: 'eating_spot',   color: '#f1c40f' },
+            'finish_eating':    { area: 'checkout_spot', color: '#9b59b6' },
+            'checkout':         { area: 'exit',          color: '#8e44ad' },
+            'leave_on_rod':     { area: 'entrance',          color: '#c0392b' },
+            'leave_on_fishing': { area: 'entrance',          color: '#c0392b' }
+        };
+
+        class Customer {
+            constructor(id, arrivalTime) {
+                this.id = id;
+                this.state = 'arrival';
+                // 顧客的初始視覺位置設在入口處，但目標是第一個等待區
+                const startArea = areas['entrance'];
+                this.pos = { x: startArea.x + startArea.w / 2, y: startArea.y + startArea.h / 2 };
+                this.targetPos = { ...this.pos };
+                this.color = stateMapping[this.state].color;
+                this.arrivalTime = arrivalTime;
+            }
+            
+            updateState(event) {
+                this.state = event.event;
+                const mapping = stateMapping[this.state];
+                if (mapping) {
+                    const targetArea = areas[mapping.area];
+                    this.targetPos = {
+                        x: targetArea.x + (targetArea.w > 0 ? (Math.random() * 0.8 + 0.1) * targetArea.w : 0),
+                        y: targetArea.y + (targetArea.h > 0 ? (Math.random() * 0.8 + 0.1) * targetArea.h : 0)
+                    };
+                    this.color = mapping.color;
+                }
+            }
+
+            move(deltaTime) {
+                const moveSpeed = 1.5;
+                const dx = this.targetPos.x - this.pos.x;
+                const dy = this.targetPos.y - this.pos.y;
+                if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+                    this.pos.x += dx * moveSpeed * deltaTime;
+                    this.pos.y += dy * moveSpeed * deltaTime;
+                }
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.pos.x, this.pos.y, 8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#2c3e50';
+                ctx.stroke();
+                ctx.fillStyle = '#000';
+                ctx.font = '10px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(this.id, this.pos.x, this.pos.y - 12);
+            }
+        }
+
+        function drawBackground(areaCounts) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            Object.values(areas).forEach(area => {
+                if (area.w > 0) {
+                    ctx.fillStyle = area.color + '20';
+                    ctx.fillRect(area.x, area.y, area.w, area.h);
+                    ctx.strokeStyle = area.color;
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(area.x, area.y, area.w, area.h);
+                    ctx.fillStyle = '#2c3e50';
+                    ctx.font = 'bold 14px Arial';
+                    ctx.textAlign = 'center';
+                    const count = areaCounts[area.label] || 0;
+                    ctx.fillText(`${area.label} (${count})`, area.x + area.w / 2, area.y + 20);
+                }
+            });
+        }
+        
+        function drawGanttCharts() {
+            ganttContainer.innerHTML = '<h3>顧客動態甘特圖</h3>';
+            const sortedCustomers = Array.from(customers.values()).sort((a,b) => a.id - b.id);
+            for (const customer of sortedCustomers) {
+                const history = customerEventHistory.get(customer.id);
+                if (!history) continue;
+                const row = document.createElement('div');
+                row.className = 'gantt-row';
+                const label = document.createElement('div');
+                label.className = 'gantt-label';
+                label.textContent = `顧客 ${customer.id}`;
+                const timeline = document.createElement('div');
+                timeline.className = 'timeline-bar';
+                for (let i = 0; i < history.length - 1; i++) {
+                    timeline.appendChild(createGanttSegment(history[i], history[i+1].time));
+                }
+                timeline.appendChild(createGanttSegment(history[history.length - 1], currentTime));
+                row.appendChild(label);
+                row.appendChild(timeline);
+                ganttContainer.appendChild(row);
+            }
+        }
+        
+        function createGanttSegment(event, endTime) {
+            const segment = document.createElement('div');
+            segment.className = 'gantt-segment';
+            const mapping = stateMapping[event.event];
+            if (!mapping) return segment;
+            const startTime = event.time;
+            const duration = Math.max(0, endTime - startTime);
+            segment.style.left = `${(startTime / maxSimTime) * 100}%`;
+            segment.style.width = `${(duration / maxSimTime) * 100}%`;
+            segment.style.backgroundColor = mapping.color;
+            segment.title = `階段: ${event.event}\n時間: ${startTime.toFixed(1)} ~ ${endTime.toFixed(1)}分鐘`;
+            return segment;
+        }
+
+        function animate(timestamp) {
+            if (!isRunning) return;
+            const deltaTime = (timestamp - lastTimestamp) / 1000 || 0;
+            lastTimestamp = timestamp;
+            currentTime += deltaTime * speed;
+
+            while (nextEventIndex < simulationEvents.length && simulationEvents[nextEventIndex].time <= currentTime) {
+                const event = simulationEvents[nextEventIndex];
+                let customer = customers.get(event.id);
+                if (event.event === 'arrival') {
+                    if (!customer) {
+                        customer = new Customer(event.id, event.time);
+                        customers.set(event.id, customer);
+                        customerEventHistory.set(event.id, []);
+                        stats.total++;
+                    }
+                }
+                if (customer) {
+                    customer.updateState(event);
+                    customerEventHistory.get(event.id).push(event);
+                }
+                if (['checkout', 'leave_on_rod', 'leave_on_fishing'].includes(event.event)) {
+                     setTimeout(() => { customers.delete(event.id); }, 3000);
+                }
+                nextEventIndex++;
+            }
+            
+            const areaCounts = {};
+            for (const area of Object.values(areas)) areaCounts[area.label] = 0;
+            customers.forEach(c => {
+                const mapping = stateMapping[c.state];
+                if (mapping) {
+                    const areaLabel = areas[mapping.area].label;
+                    if(areaLabel) areaCounts[areaLabel]++;
+                }
+            });
+            stats.active = customers.size;
+            stats.completed = stats.total - stats.active;
+
+            drawBackground(areaCounts);
+            customers.forEach(c => {
+                c.move(deltaTime);
+                c.draw();
+            });
+            drawGanttCharts();
+            updateStats();
+
+            if (currentTime < maxSimTime * 1.05) {
+                 animationFrameId = requestAnimationFrame(animate);
+            } else {
+                isRunning = false;
+                console.log("動畫播放完畢。");
+            }
+        }
+        
+        function updateStats() {
+            document.getElementById('current-time').textContent = `${currentTime.toFixed(2)} 分鐘`;
+            document.getElementById('total-customers').textContent = stats.total;
+            document.getElementById('active-customers').textContent = stats.active;
+            document.getElementById('completed-customers').textContent = stats.completed;
+        }
+        
+        async function loadDataAndInit() {
+            try {
+                const response = await fetch('simulation_log.json?t=' + new Date().getTime());
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                simulationEvents = await response.json();
+                simulationEvents.sort((a, b) => a.time - b.time);
+                if (simulationEvents.length > 0) {
+                    maxSimTime = simulationEvents[simulationEvents.length - 1].time;
+                }
+                resetAnimation();
+                document.getElementById('startBtn').disabled = false;
+                console.log(`成功載入 ${simulationEvents.length} 個模擬事件。`);
+            } catch (e) {
+                console.error("無法載入 simulation_log.json:", e);
+                alert("錯誤：無法載入模擬日誌檔案！請確保 simulation_log.json 檔案存在於同一個目錄下，並且你正在透過一個本地伺服器來瀏覽此頁面。");
+            }
+        }
+
+        function resetAnimation() {
+            pauseAnimation();
+            currentTime = 0;
+            nextEventIndex = 0;
+            customers.clear();
+            customerEventHistory.clear();
+            stats = { total: 0, active: 0, completed: 0 };
+            const initialCounts = {};
+            Object.values(areas).forEach(a => initialCounts[a.label] = 0);
+            drawBackground(initialCounts);
+            drawGanttCharts();
+            updateStats();
+            document.getElementById('startBtn').textContent = '開始模擬';
+            document.getElementById('speed-display').textContent = `速度: ${speed}x`;
+        }
+        
+        function startAnimation() {
+            if (isRunning) return;
+            isRunning = true;
+            document.getElementById('startBtn').textContent = '繼續';
+            lastTimestamp = performance.now();
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        function pauseAnimation() {
+            isRunning = false;
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+        }
+
+        function speedUp() {
+            speed = Math.min(speed * 2, 256);
+            document.getElementById('speed-display').textContent = `速度: ${speed}x`;
+        }
+        
+        function slowDown() {
+            speed = Math.max(speed / 2, 1);
+            document.getElementById('speed-display').textContent = `速度: ${speed}x`;
+        }
+
+        window.onload = () => {
+            document.getElementById('startBtn').disabled = true;
+            const initialCounts = {};
+            Object.values(areas).forEach(a => initialCounts[a.label] = 0);
+            drawBackground(initialCounts);
+            updateStats();
+            loadDataAndInit();
+        };
+    </script>
+</body>
+</html>

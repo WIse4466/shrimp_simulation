@@ -7,20 +7,22 @@ cd shrimp_simulation
 ```
 # Set up environment
 
-# use venv to build virtual environment
+use venv to build virtual environment
 ```bash!
 python -m venv venv
 ```
 
-# activate virtual environment
-# Windows
+activate virtual environment
+
+Windows
 ```bash!
 venv\Scripts\activate
 ```
-# macOS/Linux
+macOS/Linux
 ```bash!
 source venv/bin/activate
 ```
+Install required packages
 ```bash!
 pip install -r requirements.txt
 ```
